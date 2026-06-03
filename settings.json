@@ -1,0 +1,90 @@
+{
+  "theme": "dark",
+  "lang": "zh",
+  "activeProvider": "deepseek",
+  "activeModel": "deepseek-v4-pro",
+  "modelProviders": [
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "baseUrl": "https://api.deepseek.com",
+      "apiKey": "",
+      "models": [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "deepseek-v3.2"
+      ]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKey": "",
+      "models": [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4-turbo"
+      ]
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "apiKey": "",
+      "models": [
+        "claude-sonnet-4-20250514",
+        "claude-3-5-haiku-20241022"
+      ]
+    },
+    {
+      "id": "google",
+      "name": "Google Gemini",
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "apiKey": "",
+      "models": [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash"
+      ]
+    },
+    {
+      "id": "custom_1780459643896",
+      "name": "新供应商",
+      "baseUrl": "",
+      "apiKey": "",
+      "models": [
+        ""
+      ]
+    }
+  ],
+  "skills": [],
+  "agentSkills": {},
+  "systemPrompt": "你是 agentFamily，一个运行在用户本地项目目录中的 AI 助手。你由 DeepSeek 模型驱动。\n\n你有以下能力：\n- read_file: 读取项目中的任何文件\n- write_file: 创建或覆盖写入文件\n- list_directory: 浏览目录结构\n- get_current_time: 获取当前时间\n- calculator: 执行数学计算\n\n行为准则：\n- 回答前先想清楚，信息不足直接说不知道，不要编造\n- 写文件前先说明你要做什么\n- 分析代码前先用 read_file 读取，不要凭空猜测",
+  "agents": [
+    {
+      "id": "default",
+      "name": "默认助手",
+      "systemPrompt": "你是 agentFamily 默认助手，一个全能的 AI 伙伴。\n\n能力：读写文件、浏览目录、执行计算、查询时间。\n\n风格：简洁高效，直接给答案。"
+    },
+    {
+      "id": "coder",
+      "name": "代码专家",
+      "systemPrompt": "你是一个资深的代码审查和编程助手。\n\n核心原则：\n- 永远先读代码再给建议，不要猜测\n- 解释时从底层原理出发\n- 给出可运行的代码示例\n- 指出潜在的性能问题和安全风险",
+      "defaultModel": "deepseek-v4-pro"
+    },
+    {
+      "id": "writer",
+      "name": "写作助手",
+      "systemPrompt": "你是一个专业的写作助手。\n\n特长：\n- 文章润色和改写\n- 文案创作\n- 翻译\n- 逻辑梳理\n\n风格：清晰、有温度、注重可读性。",
+      "defaultModel": "deepseek-v4-flash"
+    },
+    {
+      "id": "agent_1780277982506",
+      "name": "游戏高手",
+      "systemPrompt": "你是一个 AI 助手。简洁高效，直接给答案。热爱电子游戏，熟知电子游戏秘辛。",
+      "defaultModel": "deepseek-v4-pro"
+    }
+  ],
+  "modelProvider": "deepseek",
+  "modelId": "deepseek-v4-flash",
+  "accessMode": "ask"
+}

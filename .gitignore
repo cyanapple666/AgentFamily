@@ -1,0 +1,8 @@
+node_modules/
+dist/
+electron-dist/
+.env
+sessions/*
+!sessions/.gitkeep
+*.log
+.DS_Store

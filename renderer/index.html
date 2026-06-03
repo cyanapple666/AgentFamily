@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>agentFamily</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── 深色主题（默认） ── */
+    :root, [data-theme="dark"] {
+      --bg: #0f0f1a;
+      --bg2: #161625;
+      --bg3: #1c1c30;
+      --bg4: #252540;
+      --bg5: #2e2e4a;
+
+      --text: #e4e4ef;
+      --text2: #9494b8;
+      --text3: #6a6a8a;
+
+      --border: #2a2a45;
+      --border2: #363655;
+      --border-focus: #6366f1;
+
+      --accent: #6366f1;
+      --accent-hover: #7c7ff7;
+      --accent-soft: rgba(99, 102, 241, 0.12);
+      --accent-glow: rgba(99, 102, 241, 0.25);
+
+      --user-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+      --user-text: #fff;
+
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+
+      --input-bg: #1a1a2e;
+      --input-border: #363655;
+      --input-focus: #6366f1;
+
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+      --shadow-accent: 0 4px 20px rgba(99, 102, 241, 0.3);
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ── 浅色主题 ── */
+    [data-theme="light"] {
+      --bg: #f5f5f7;
+      --bg2: #ffffff;
+      --bg3: #f8f8fa;
+      --bg4: #ecedf0;
+      --bg5: #e0e1e6;
+
+      --text: #1a1a2e;
+      --text2: #6b6b80;
+      --text3: #9a9aaa;
+
+      --border: #e0e1e6;
+      --border2: #d1d3d8;
+      --border-focus: #6366f1;
+
+      --accent: #6366f1;
+      --accent-hover: #5558e8;
+      --accent-soft: rgba(99, 102, 241, 0.08);
+      --accent-glow: rgba(99, 102, 241, 0.15);
+
+      --user-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+      --user-text: #fff;
+
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+
+      --input-bg: #fff;
+      --input-border: #d1d3d8;
+      --input-focus: #6366f1;
+
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.12);
+      --shadow-accent: 0 4px 20px rgba(99, 102, 241, 0.2);
+    }
+
+    /* ── 全局基础 ── */
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background var(--transition-slow), color var(--transition-slow);
+    }
+
+    /* ── 滚动条 ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+    * { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+
+    /* ── 选中文字 ── */
+    ::selection { background: var(--accent-soft); color: var(--text); }
+
+    /* ── Focus 全局 ── */
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+    /* ── 代码块 ── */
+    .code-block {
+      background: var(--bg);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      margin: 8px 0;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.6;
+      border: 1px solid var(--border);
+      font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", monospace;
+    }
+    .code-block code { background: transparent; padding: 0; color: var(--text); }
+    .inline-code {
+      background: var(--accent-soft);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      color: var(--accent);
+    }
+
+    /* ── 通用按钮基础 ── */
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text2);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .icon-btn:hover {
+      background: var(--accent-soft);
+      color: var(--text);
+    }
+    .icon-btn:active {
+      transform: scale(0.92);
+    }
+
+    /* ── 动画 ── */
+    @keyframes dotPulse {
+      0%, 100% { opacity: 0.2; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+    .dot { animation: dotPulse 1.4s infinite; font-size: 6px; margin: 0 3px; color: var(--text3); }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .cursor-blink { animation: blink 1s step-end infinite; opacity: 0.5; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .slide-in { animation: slideIn 0.25s ease-out; }
+
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .scale-in { animation: scaleIn 0.2s ease-out; }
+
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>

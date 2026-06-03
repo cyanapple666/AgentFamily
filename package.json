@@ -1,0 +1,41 @@
+{
+  "name": "agent-family",
+  "version": "0.1.0",
+  "description": "基于 Pi SDK 的 AI Agent 开发项目，多 Agent 协作 + 记忆系统 + 桌面应用",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "dev:renderer": "vite",
+    "dev:server": "tsx --watch electron/server-standalone.ts",
+    "dev:electron": "tsc -p tsconfig.electron.json && concurrently \"npm run dev:renderer\" \"electron electron-dist/electron/main.js\"",
+    "build:renderer": "vite build",
+    "build": "npm run build:renderer",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "latest",
+    "@earendil-works/pi-ai": "latest",
+    "@earendil-works/pi-coding-agent": "latest",
+    "@hono/node-server": "^2.0.4",
+    "@vitejs/plugin-react": "^6.0.2",
+    "dotenv": "^17.4.2",
+    "electron": "^42.3.0",
+    "hono": "^4.12.23",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "typebox": "latest",
+    "vite": "^8.0.14",
+    "ws": "^8.18.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.5.0",
+    "concurrently": "^9.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
