@@ -98,6 +98,13 @@ export function createAgent(
       const now = new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
       const modelName = config.modelId || "unknown";
       const injected = [...messages];
+
+      // 规范化 assistant 消息的 content 格式，防止 SDK 内部 flatMap 报错
+      for (const msg of injected) {
+        if ((msg as any).role === "assistant" && typeof (msg as any).content === "string") {
+          (msg as any).content = (msg as any).content ? [{ type: "text", text: (msg as any).content }] : [];
+        }
+      }
       if (injected.length > 0 && (injected[0] as any).role === "system") {
         const sysMsg = injected[0] as any;
         if (typeof sysMsg.content === "string") {

@@ -7,6 +7,7 @@ import Sidebar from "./components/Sidebar";
 import SettingsPanel from "./components/SettingsPanel";
 import FilePanel from "./components/FilePanel";
 import AgentEditor from "./components/AgentEditor";
+import ObservationPanel, { type OrchestratorState, type TaskStatus } from "./components/ObservationPanel";
 import { useWebSocket } from "./hooks/useWebSocket";
 import type { DisplayMessage, SessionMeta } from "./types";
 import { useT, useLang } from "./i18n";
@@ -41,6 +42,8 @@ export default function App() {
   const [agentList, setAgentList] = useState<any[]>([]);
   const [permRequest, setPermRequest] = useState<any>(null);
   const [tokenTotal, setTokenTotal] = useState(0);
+  const [obsVisible, setObsVisible] = useState(false);
+  const [obsState, setObsState] = useState<OrchestratorState>({ phase: "idle", summary: "", reasoning: "", tasks: [] });
   const [fileList, setFileList] = useState<any[]>([]);
   const [filePath, setFilePath] = useState(".");
   const [showFilePanel, setShowFilePanel] = useState(true);
@@ -82,6 +85,100 @@ export default function App() {
       case "permission_request": setPermRequest(event); break;
       case "file_list": setFileList(event.files || []); setFilePath(event.currentPath || "."); break;
       case "skill_list": setSkillList(event.skills || []); setAgentSkills(event.agentSkills || {}); break;
+      case "orchestrator_event": {
+        const evt = (event as any).event || event;
+        // ── 更新观察面板状态 ──
+        setObsState((prev) => {
+          const next = { ...prev };
+          switch (evt.type) {
+            case "plan_start":
+              next.phase = "decomposing";
+              next.startedAt = Date.now();
+              next.summary = "";
+              next.reasoning = "";
+              next.tasks = [];
+              next.approved = undefined;
+              next.reviewSummary = undefined;
+              break;
+            case "plan_ready":
+              next.phase = "executing";
+              if (evt.plan) {
+                next.summary = evt.plan.summary || "";
+                next.reasoning = evt.plan.reasoning || "";
+                next.tasks = (evt.plan.tasks || []).map((t: any) => ({
+                  id: t.id, title: t.title, type: t.type, status: "pending" as const,
+                }));
+              }
+              break;
+            case "task_start":
+              next.tasks = next.tasks.map((t) =>
+                t.id === evt.taskId ? { ...t, status: "running" as const, startTime: Date.now() } : t
+              );
+              next.currentTaskId = evt.taskId;
+              break;
+            case "task_done":
+              next.tasks = next.tasks.map((t) =>
+                t.id === evt.taskId ? { ...t, status: "done" as const, endTime: Date.now(), reasoning: evt.result?.reasoning, filesWritten: evt.result?.filesWritten } : t
+              );
+              break;
+            case "task_error":
+              next.tasks = next.tasks.map((t) =>
+                t.id === evt.taskId ? { ...t, status: "failed" as const, endTime: Date.now() } : t
+              );
+              break;
+            case "review_start":
+              next.phase = "reviewing";
+              next.currentTaskId = undefined;
+              break;
+            case "review_done":
+              next.phase = "done";
+              if (evt.result) {
+                next.approved = evt.result.approved;
+                next.reviewSummary = evt.result.summary;
+              }
+              break;
+          }
+          return next;
+        });
+        // ── 更新聊天消息 ──
+        const evtType = evt.type as string;
+        const icon = { plan_start: "🔍", plan_ready: "📋", task_start: "⚡", task_done: "✅", task_error: "❌", review_start: "🔎", review_done: "📝", final_answer: "💬" }[evtType] || "ℹ️";
+        const label = { plan_start: "开始分析需求...", plan_ready: "任务分解完成", task_start: `执行: ${evt.taskId}`, task_done: `完成: ${evt.taskId}`, task_error: `失败: ${evt.taskId}`, review_start: "开始验收...", review_done: "验收完成", final_answer: "" }[evtType] || evt.type;
+        if (evt.type === "plan_delta" || evt.type === "review_delta") {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === "assistant" && last.isStreaming) {
+              return [...prev.slice(0, -1), { ...last, content: last.content + evt.delta }];
+            }
+            return [...prev, { id: uid(), role: "assistant", content: evt.delta || "", timestamp: Date.now(), isStreaming: true } as DisplayMessage];
+          });
+        } else if (evt.type === "final_answer") {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === "assistant" && last.isStreaming) {
+              return [...prev.slice(0, -1), { ...last, content: evt.content, isStreaming: false }];
+            }
+            return [...prev, { id: uid(), role: "assistant", content: evt.content, timestamp: Date.now(), isStreaming: false } as DisplayMessage];
+          });
+        } else if (label) {
+          setMessages((prev) => [...prev, { id: uid(), role: "assistant", content: `${icon} ${label}`, timestamp: Date.now(), isStreaming: false } as DisplayMessage]);
+        }
+        break;
+      }
+      case "orchestrate_done":
+        setIsStreaming(false);
+        setObsState((prev) => ({ ...prev, phase: "done" }));
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === "assistant" && last.isStreaming) {
+            return [...prev.slice(0, -1), { ...last, content: last.content || event.answer || "", isStreaming: false }];
+          }
+          if (event.answer) {
+            return [...prev, { id: uid(), role: "assistant", content: event.answer, timestamp: Date.now(), isStreaming: false } as DisplayMessage];
+          }
+          return prev;
+        });
+        break;
     }
   }, []);
 
@@ -89,14 +186,40 @@ export default function App() {
 
   useEffect(() => { if (connected) { send({ type: "list_sessions" }); send({ type: "get_config" }); send({ type: "list_agents" }); send({ type: "list_skills" }); send({ type: "list_files", path: "." }); } }, [connected]);
 
+  /**
+   * 发送消息处理函数
+   * 
+   * 处理用户输入，判断是否为编排命令，并发送到服务器
+   * 
+   * @param content - 用户输入的内容
+   */
   const handleSend = useCallback((content: string) => {
+    // 空内容或正在流式传输时不发送
     if (!content.trim() || isStreaming) return;
+
+    // 判断是否为编排命令（以 /orchestrate 开头）
+    const isOrchestrate = content.trimStart().startsWith("/orchestrate");
+    // 提取实际内容（去掉 /orchestrate 前缀）
+    const actualContent = isOrchestrate ? content.trimStart().slice("/orchestrate".length).trim() : content;
+
+    // 添加用户消息到消息列表
     setMessages((prev) => [...prev, { id: uid(), role: "user", content, timestamp: Date.now(), isStreaming: false } as DisplayMessage]);
     setIsStreaming(true);
-    send({ type: "prompt", content });
+
+    if (isOrchestrate) {
+      // 重置观察面板状态
+      setObsState({ phase: "idle", summary: "", reasoning: "", tasks: [] });
+      // 显示观察面板
+      setObsVisible(true);
+      // 发送编排命令到服务器
+      send({ type: "orchestrate", content: actualContent });
+    } else {
+      // 发送普通对话消息
+      send({ type: "prompt", content });
+    }
   }, [send, isStreaming]);
   const handleSwitchSession = useCallback((id: string) => { localStorage.setItem(STORAGE_KEY, id); setSessionId(id); setMessages([]); send({ type: "switch_session", sessionId: id }); }, [send]);
-  const handleNewSession = useCallback(() => { localStorage.removeItem(STORAGE_KEY); setSessionId(""); setMessages([]); send({ type: "switch_session", sessionId: "" }); }, [send]);
+  const handleNewSession = useCallback(() => { localStorage.removeItem(STORAGE_KEY); setSessionId(""); setMessages([]); setObsState({ phase: "idle", summary: "", reasoning: "", tasks: [] }); send({ type: "switch_session", sessionId: "" }); }, [send]);
 
   const inputRef = useCallback((node: HTMLInputElement | null) => {
     (window as any).__afInput = node;
@@ -115,6 +238,9 @@ export default function App() {
           onArchive={(id) => send({ type: "archive_session", sessionId: id })}
           collapsed={!sidebarOpen}
           onToggle={() => setSidebarOpen((v) => !v)}
+          obsState={obsState}
+          obsVisible={obsVisible}
+          onObsToggle={() => setObsVisible((v) => !v)}
         />
 
         {/* 主区域 */}

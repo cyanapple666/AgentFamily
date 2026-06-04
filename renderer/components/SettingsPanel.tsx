@@ -480,6 +480,38 @@ export default function SettingsPanel({ config, skills, agentSkills, onClose, on
                   <HelpKey>设置 → 模型供应商</HelpKey><HelpVal>配置 API Key 和模型</HelpVal>
                   <HelpKey>设置 → Agent</HelpKey><HelpVal>管理 Agent 人格</HelpVal>
                 </div>
+                <SectionTitle style={{ marginTop: 20 }}>SubAgent 多智能体协作</SectionTitle>
+                <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.8 }}>
+                  <p>SubAgent 是 agentFamily 的核心能力，可以把一个复杂需求拆解成多个子任务，由不同的 Agent 并行执行。</p>
+                  <p style={{ marginTop: 8 }}><strong style={{ color: "var(--accent)" }}>工作流程</strong></p>
+                  <div style={{ background: "var(--bg3)", borderRadius: "var(--radius-sm)", padding: "10px 12px", marginTop: 6, fontFamily: "monospace", fontSize: 11 }}>
+                    <div>1. <strong>分解</strong> — 分析需求，拆成可并行的子任务</div>
+                    <div>2. <strong>契约</strong> — 定义子任务间的接口协议</div>
+                    <div>3. <strong>执行</strong> — 多个 SubAgent 并行处理各自任务</div>
+                    <div>4. <strong>验收</strong> — 检查一致性、冲突、规范</div>
+                  </div>
+                  <p style={{ marginTop: 8 }}><strong style={{ color: "var(--accent)" }}>任务类型</strong></p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                    {"frontend,backend,ui,test,docs,config".split(",").map((t) => (
+                      <span key={t} style={{ padding: "2px 8px", borderRadius: 4, background: "var(--bg4)", fontSize: 10, fontFamily: "monospace", color: "var(--text2)" }}>{t}</span>
+                    ))}
+                  </div>
+                  <p style={{ marginTop: 8 }}><strong style={{ color: "var(--accent)" }}>使用方式</strong></p>
+                  <p>在聊天中输入复杂需求，系统会自动判断是否需要拆解。也可以用前缀 <code style={{ background: "var(--bg4)", padding: "1px 5px", borderRadius: 3, fontFamily: "monospace", fontSize: 11 }}>/orchestrate</code> 强制触发。</p>
+                  <p style={{ marginTop: 4 }}><strong style={{ color: "var(--accent)" }}>适用场景</strong></p>
+                  <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                    <li>需要前后端同时开发的功能</li>
+                    <li>涉及多个文件的重构</li>
+                    <li>需要测试 + 文档同步完成的任务</li>
+                  </ul>
+                  <p style={{ marginTop: 4 }}><strong style={{ color: "var(--warning)" }}>注意事项</strong></p>
+                  <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                    <li>每次调用会消耗多次 API 请求，注意 token 用量</li>
+                    <li>简单任务（改一个文件）不需要用 SubAgent，直接对话更快</li>
+                    <li>SubAgent 之间通过契约协调，复杂交互建议拆成更小的契约</li>
+                  </ul>
+                </div>
+
                 <SectionTitle style={{ marginTop: 20 }}>关于</SectionTitle>
                 <div style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.8 }}>
                   <p>agentFamily 是一个基于 Pi SDK 的 AI Agent 开发项目。</p>

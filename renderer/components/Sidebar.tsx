@@ -1,17 +1,22 @@
 import { useState } from "react";
 import type { SessionMeta } from "../types";
+import type { OrchestratorState } from "./ObservationPanel";
 import type React from "react";
 import { useT } from "../i18n";
 import { MenuIcon, CloseIcon, PlusIcon, MessageIcon, EditIcon, ArchiveIcon } from "./Icons";
+import ObservationPanel from "./ObservationPanel";
 
 interface Props {
   sessions: SessionMeta[]; currentId: string;
   onSwitch: (id: string) => void; onNew: () => void;
   onRename: (id: string, title: string) => void; onArchive: (id: string) => void;
   collapsed: boolean; onToggle: () => void;
+  obsState: OrchestratorState;
+  obsVisible: boolean;
+  onObsToggle: () => void;
 }
 
-export default function Sidebar({ sessions, currentId, onSwitch, onNew, onRename, onArchive, collapsed, onToggle }: Props) {
+export default function Sidebar({ sessions, currentId, onSwitch, onNew, onRename, onArchive, collapsed, onToggle, obsState, obsVisible, onObsToggle }: Props) {
   const t = useT();
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
@@ -109,6 +114,13 @@ export default function Sidebar({ sessions, currentId, onSwitch, onNew, onRename
           </>
         )}
       </div>
+
+      {/* 编排观察窗口 */}
+      <ObservationPanel
+        state={obsState}
+        visible={obsVisible}
+        onToggle={onObsToggle}
+      />
     </div>
   );
 }

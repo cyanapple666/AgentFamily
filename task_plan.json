@@ -1,0 +1,32 @@
+{
+  "summary": "更新 package.json 版本号为 0.1.2，并在 CHANGELOG.md 中新增对应版本的变更记录",
+  "reasoning": "这是一个纯配置+文档类任务，涉及两个文件的修改：package.json 的 version 字段和 CHANGELOG.md 的新版本条目的添加。两个修改属于同一版本发布流程，放在一个任务中即可，无需过度拆分。CHANGELOG 已遵循 Keep a Changelog 格式和语义化版本规范，新增条目需保持一致。目前 package.json 版本是 0.1.0，需要跳过 0.1.1（已在 CHANGELOG 中有记录但 package.json 未同步），直接设为 0.1.2。",
+  "rules": [
+    "CHANGELOG 必须遵循 Keep a Changelog 格式",
+    "版本号必须遵循语义化版本 (SemVer) 规范"
+  ],
+  "tasks": [
+    {
+      "id": "task_1",
+      "type": "config",
+      "title": "更新版本号到 0.1.2 并补充 CHANGELOG",
+      "description": "1. 将 package.json 中的 \"version\" 字段从 \"0.1.0\" 改为 \"0.1.2\"。\n2. 在 CHANGELOG.md 的 [Unreleased] 和 [0.1.1] 之间插入 [0.1.2] 版本的条目，包含本次变更内容（更新版本号、同步 CHANGELOG）。\n3. 在 CHANGELOG 底部新增 [0.1.2] 的版本对比链接。\n4. 验收标准：package.json 中 version 为 \"0.1.2\"；CHANGELOG.md 中包含 [0.1.2] 条目且格式与现有条目一致。",
+      "constraints": [
+        "package.json 必须是合法的 JSON 格式",
+        "CHANGELOG.md 的 [0.1.2] 条目必须遵循 Keep a Changelog 格式（使用 ### Added / ### Changed / ### Fixed 等分类）",
+        "版本号 0.1.2 必须符合语义化版本 MAJOR.MINOR.PATCH 格式"
+      ],
+      "files": [
+        "package.json",
+        "CHANGELOG.md"
+      ],
+      "output": [
+        "package.json",
+        "CHANGELOG.md"
+      ],
+      "relatedContracts": []
+    }
+  ],
+  "contracts": [],
+  "dependencies": []
+}

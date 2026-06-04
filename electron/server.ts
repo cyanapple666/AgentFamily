@@ -95,9 +95,11 @@ export function startServer(port: number): AgentServer {
     let currentAgentId = "default";
     let prevMsgLen = 0;
     let agentGeneration = 0;
-    let sessionTitle = ""; // AI 生成的标题，只设一次 // 代际计数器 // 用于 token 增量估算
+    let sessionTitle = ""; // AI 生成的标题，只设一次
     // 权限请求的 Promise resolver
     let pendingPermission: { resolve: (v: boolean) => void } | null = null;
+    // 是否刚切换会话（用于避免切换时更新 updatedAt）
+    let justSwitchedSession = false;
 
     async function initAgent(msgs?: any[]) {
       const thisGen = ++agentGeneration;
@@ -194,6 +196,11 @@ export function startServer(port: number): AgentServer {
               }
             }
             if (agent) {
+              // 检查是否刚切换会话（用于避免切换时更新 updatedAt）
+              const bumpTime = !justSwitchedSession;
+              justSwitchedSession = false;
+              console.log(`[Session] agent_end: sessionId=${sessionId}, bumpTime=${bumpTime}, justSwitched=${!bumpTime}, 消息数=${(event as any).messages?.length}`);
+
               // 首次对话后用 AI 生成标题
               if (!sessionTitle && firstMessage) {
                 const replyText = agent.state.messages
@@ -204,7 +211,15 @@ export function startServer(port: number): AgentServer {
                   sessionTitle = t;
                   saveSession(sessionId, agent!.state.messages, sessionTitle, {
                     modelId: currentModelId, accessMode: currentMode, thinking: currentThinking, agentId: currentAgentId,
-                  }).then(() => { memory.indexSession(sessionId, sessionTitle, agent!.state.messages, Date.now()); }).catch(() => {});
+                  }, bumpTime).then(() => {
+                    memory.indexSession(sessionId, sessionTitle, agent!.state.messages, Date.now());
+                    // 刷新会话列表
+                    listSessions().then((sessions) => {
+                      if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: "session_list", sessions }));
+                      }
+                    }).catch(() => { });
+                  }).catch(() => { });
                 });
               }
               saveSession(sessionId, agent.state.messages, sessionTitle || firstMessage || undefined, {
@@ -212,7 +227,7 @@ export function startServer(port: number): AgentServer {
                 accessMode: currentMode,
                 thinking: currentThinking,
                 agentId: currentAgentId,
-              }).then(() => {
+              }, bumpTime).then(() => {
                 // 建记忆索引
                 memory.indexSession(
                   sessionId,
@@ -220,6 +235,13 @@ export function startServer(port: number): AgentServer {
                   agent?.state.messages || [],
                   Date.now()
                 );
+                // 刷新会话列表
+                listSessions().then((sessions) => {
+                  console.log(`[Session] agent_end 后列表排序: ${sessions.map((s) => `${s.title.slice(0, 15)}(id=${s.id.slice(-8)}, t=${s.updatedAt})`).join(" → ")}`);
+                  if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: "session_list", sessions }));
+                  }
+                }).catch(() => { });
               }).catch((err) => console.error("[Server] 保存失败:", err.message));
             }
             break;
@@ -238,6 +260,12 @@ export function startServer(port: number): AgentServer {
       try {
         const msg = JSON.parse(data.toString());
 
+        /**
+         * 握手消息处理
+         * 
+         * 客户端连接时发送 handshake 消息，携带 sessionId 用于会话恢复
+         * 如果 sessionId 有效且存在，恢复该会话；否则初始化新会话
+         */
         if (msg.type === "handshake") {
           if (msg.sessionId) {
             const saved = await loadSession(msg.sessionId);
@@ -248,14 +276,21 @@ export function startServer(port: number): AgentServer {
               currentThinking = saved.meta?.thinking || "off";
               currentAgentId = saved.meta?.agentId || "default";
               sessionTitle = saved.meta?.title || "";
+              // 标记刚恢复会话，避免 initAgent 时触发的 agent_end 更新 updatedAt
+              justSwitchedSession = true;
               await initAgent(saved.messages);
               ws.send(JSON.stringify({ type: "history", messages: saved.messages }));
               sendSessionMeta();
+              console.log(`[Handshake] 恢复会话: ${sessionId}`);
               return;
+            } else {
+              console.log(`[Handshake] 会话不存在: ${msg.sessionId}`);
             }
           }
           // 没有有效的 sessionId：延迟创建会话，等用户发第一条消息时再创建
           ws.send(JSON.stringify({ type: "session", sessionId: "" }));
+          // 标记刚初始化会话，避免 initAgent 时触发的 agent_end 更新 updatedAt
+          justSwitchedSession = true;
           await initAgent([]);
           ws.send(JSON.stringify({ type: "history", messages: [] }));
           ws.send(JSON.stringify({ type: "mode", mode: "ask" }));
@@ -263,6 +298,40 @@ export function startServer(port: number): AgentServer {
           return;
         }
 
+        /**
+         * 会话一致性检查
+         * 
+         * 非握手消息携带 sessionId，用于验证会话一致性
+         * 如果消息中的 sessionId 与当前连接的 sessionId 不匹配，尝试恢复会话
+         */
+        if (msg.sessionId && msg.sessionId !== sessionId) {
+          console.log(`[Session] 检测到会话切换: 当前=${sessionId}, 消息=${msg.sessionId}`);
+          const saved = await loadSession(msg.sessionId);
+          if (saved) {
+            // 保存当前会话（如果存在）
+            if (sessionId && agent && agent.state.messages.length > 0) {
+              await saveSession(sessionId, agent.state.messages, firstMessage, {
+                modelId: currentModelId, accessMode: currentMode, thinking: currentThinking, agentId: currentAgentId,
+              }, false).catch(() => { });
+            }
+            // 恢复消息中指定的会话
+            sessionId = msg.sessionId;
+            currentModelId = saved.meta?.modelId || "deepseek-v4-pro";
+            currentMode = saved.meta?.accessMode || "ask";
+            currentThinking = saved.meta?.thinking || "off";
+            currentAgentId = saved.meta?.agentId || "default";
+            sessionTitle = saved.meta?.title || "";
+            firstMessage = "";
+            await initAgent(saved.messages);
+            ws.send(JSON.stringify({ type: "session", sessionId }));
+            ws.send(JSON.stringify({ type: "history", messages: saved.messages }));
+            sendSessionMeta();
+          }
+        }
+
+        /**
+         * 普通消息处理（prompt）
+         */
         if (msg.type === "prompt" && msg.content && agent) {
           if (!sessionId) {
             sessionId = generateSessionId();
@@ -303,14 +372,17 @@ export function startServer(port: number): AgentServer {
         }
 
         if (msg.type === "switch_session") {
-          // 先保存当前会话
+          console.log(`[Session] 切换会话: 当前=${sessionId || "(空)"} → 目标=${msg.sessionId || "(新建)"}`);
+          // 先保存当前会话（bumpTime=false 防止跳排序）
           if (agent && sessionId && agent.state.messages && agent.state.messages.length > 0) {
+            console.log(`[Session] 保存旧会话 ${sessionId}, bumpTime=false, 消息数=${agent.state.messages.length}`);
             await saveSession(sessionId, agent.state.messages, firstMessage || undefined, {
               modelId: currentModelId, accessMode: currentMode, thinking: currentThinking, agentId: currentAgentId,
             }, false);
           }
           if (msg.sessionId) {
             const saved = await loadSession(msg.sessionId);
+            console.log(`[Session] 加载会话 ${msg.sessionId}, 标题=${saved?.meta?.title}, 消息数=${saved?.messages?.length}`);
             sessionId = msg.sessionId;
             firstMessage = "";
             sessionTitle = "";
@@ -318,6 +390,7 @@ export function startServer(port: number): AgentServer {
             currentMode = saved?.meta?.accessMode || "ask";
             currentThinking = saved?.meta?.thinking || "off";
             currentAgentId = saved?.meta?.agentId || "default";
+            justSwitchedSession = true;
             await initAgent(saved?.messages ?? []);
             ws.send(JSON.stringify({ type: "session", sessionId }));
             ws.send(JSON.stringify({ type: "history", messages: saved?.messages ?? [] }));
@@ -328,12 +401,15 @@ export function startServer(port: number): AgentServer {
             currentModelId = "deepseek-v4-pro";
             currentMode = "ask";
             currentThinking = "off";
+            justSwitchedSession = true;
             await initAgent([]);
             ws.send(JSON.stringify({ type: "session", sessionId }));
             ws.send(JSON.stringify({ type: "history", messages: [] }));
           }
           sendSessionMeta();
-          ws.send(JSON.stringify({ type: "session_list", sessions: await listSessions() }));
+          const sessionList = await listSessions();
+          console.log(`[Session] 列表排序: ${sessionList.map((s) => `${s.title.slice(0, 15)}(id=${s.id.slice(-8)}, t=${s.updatedAt})`).join(" → ")}`);
+          ws.send(JSON.stringify({ type: "session_list", sessions: sessionList }));
         }
 
         if (msg.type === "get_config") {
@@ -351,7 +427,7 @@ export function startServer(port: number): AgentServer {
             await initAgent(agent.state.messages);
             saveSession(sessionId, agent.state.messages, firstMessage || undefined, {
               modelId: currentModelId, accessMode: currentMode, thinking: currentThinking, agentId: currentAgentId,
-            }, false).catch(() => {});
+            }, false).catch(() => { });
           }
           ws.send(JSON.stringify({ type: "mode", mode: currentMode }));
         }
@@ -363,7 +439,7 @@ export function startServer(port: number): AgentServer {
             await initAgent(agent.state.messages);
             saveSession(sessionId, agent.state.messages, firstMessage || undefined, {
               modelId: currentModelId, accessMode: currentMode, thinking: currentThinking, agentId: currentAgentId,
-            }, false).catch(() => {});
+            }, false).catch(() => { });
           }
           ws.send(JSON.stringify({ type: "model", modelId: currentModelId }));
         }
@@ -374,7 +450,7 @@ export function startServer(port: number): AgentServer {
             await initAgent(agent.state.messages);
             saveSession(sessionId, agent.state.messages, firstMessage || undefined, {
               modelId: currentModelId, accessMode: currentMode, thinking: currentThinking, agentId: currentAgentId,
-            }, false).catch(() => {});
+            }, false).catch(() => { });
           }
           ws.send(JSON.stringify({ type: "thinking", level: currentThinking }));
         }
@@ -422,7 +498,7 @@ export function startServer(port: number): AgentServer {
               if (e.isDirectory()) installed.push(e.name);
               else if (e.isFile() && e.name.endsWith(".md")) installed.push(e.name.replace(/\.md$/, ""));
             }
-          } catch {}
+          } catch { }
           // 合并：已安装的 + 配置中的
           const existingSkills = settings.skills || [];
           const merged = existingSkills.filter((s) => installed.includes(s.id) || s.source !== "local");
@@ -456,7 +532,7 @@ export function startServer(port: number): AgentServer {
           const skills = (settings.skills || []).filter((s) => s.id !== msg.skillId);
           // 删除 skills 目录
           const skillDir = path.resolve(process.cwd(), "skills", msg.skillId);
-          try { await fs.rm(skillDir, { recursive: true, force: true }); } catch {}
+          try { await fs.rm(skillDir, { recursive: true, force: true }); } catch { }
           await saveSettings({ skills } as any);
           ws.send(JSON.stringify({ type: "skill_list", skills, agentSkills: settings.agentSkills || {} }));
         }
@@ -506,7 +582,7 @@ export function startServer(port: number): AgentServer {
             await initAgent(agent.state.messages);
             saveSession(sessionId, agent.state.messages, firstMessage || undefined, {
               modelId: currentModelId, accessMode: currentMode, thinking: currentThinking, agentId: currentAgentId,
-            }, false).catch(() => {});
+            }, false).catch(() => { });
           }
           sendSessionMeta();
           ws.send(JSON.stringify({ type: "agent", agentId: currentAgentId }));
@@ -520,44 +596,90 @@ export function startServer(port: number): AgentServer {
           }
         }
 
-        // ── 多 Agent 编排 ──
+        /**
+         * 多 Agent 编排命令处理
+         * 
+         * 接收用户的编排请求，运行编排器分解任务并执行，最后保存结果到当前会话
+         * 
+         * @param msg.content - 用户的编排需求内容
+         */
         if (msg.type === "orchestrate" && msg.content) {
+          // 确保有 sessionId
+          // 如果 sessionId 为空，说明 handshake 没有正确设置会话，需要生成新会话
+          // 注意：正常情况下，handshake 应该已经设置了 sessionId
+          // 如果这里为空，可能是客户端连接时没有发送有效的 sessionId
+          if (!sessionId) {
+            sessionId = generateSessionId();
+            ws.send(JSON.stringify({ type: "session", sessionId }));
+            console.log(`[Orchestrate] 创建新会话: ${sessionId}`);
+          } else {
+            console.log(`[Orchestrate] 使用现有会话: ${sessionId}`);
+          }
+
           const settings = await loadSettings();
+
           try {
-            // AgentFactory: 用现有的 createAgent 做执行
+            /**
+             * AgentFactory - 编排器用来创建子 Agent 的工厂函数
+             * 
+             * 编排器会根据任务类型创建不同的子 Agent 来执行具体任务
+             */
             const agentFactory: AgentFactory = {
-              async createAndRun(systemPrompt, userPrompt, modelId, onDelta) {
+              async createAndRun(systemPrompt: string, userPrompt: string, modelId: string | undefined, onDelta?: (delta: string) => void) {
                 let result = "";
+                // 创建子 Agent，使用指定的 systemPrompt 和模型
                 const sub = createAgent(
                   { ...defaultAgent, systemPrompt, modelId: modelId || "deepseek-v4-pro" },
                   [...customTools, ...extTools], [],
                   { accessMode: "auto" as any }
                 );
+
+                // 订阅 Agent 的消息更新事件，用于实时传递进度
                 sub.subscribe((event: any) => {
                   if (event.type === "message_update") {
                     const m = event.assistantMessageEvent;
                     if (m.type === "text_delta") {
                       result += m.delta;
-                      onDelta?.(m.delta);
+                      onDelta?.(m.delta); // 传递增量到编排器
                     }
                   }
                 });
+
+                // 执行提示词，等待完成
                 await sub.prompt(userPrompt);
                 return result;
               },
             };
 
-            // FileService
+            /**
+             * FileService - 编排器用来读写文件的服务
+             * 
+             * 提供文件读取、写入和目录列表功能
+             */
             const fileService: FileService = {
-              async readFile(p) { return fs.readFile(p, "utf-8"); },
-              async writeFile(p, c) { await fs.mkdir(path.dirname(p), { recursive: true }); await fs.writeFile(p, c, "utf-8"); },
-              async listDir(p) {
+              async readFile(p: string) { return fs.readFile(p, "utf-8"); },
+              async writeFile(p: string, c: string) {
+                await fs.mkdir(path.dirname(p), { recursive: true });
+                await fs.writeFile(p, c, "utf-8");
+              },
+              async listDir(p: string) {
                 const entries = await fs.readdir(p, { withFileTypes: true });
-                return entries.map((e) => ({ name: e.name, isDir: e.isDirectory(), path: path.relative(process.cwd(), path.join(p, e.name)).replace(/\\/g, "/") }));
+                return entries.map((e) => ({
+                  name: e.name,
+                  isDir: e.isDirectory(),
+                  path: path.relative(process.cwd(), path.join(p, e.name)).replace(/\\/g, "/"),
+                }));
               },
             };
 
-            // 运行编排器
+            /**
+             * 运行编排器
+             * 
+             * 编排器会：
+             * 1. 分析用户需求，分解成多个子任务
+             * 2. 按顺序执行每个子任务
+             * 3. 收集结果并生成最终报告
+             */
             const result = await runOrchestrator(msg.content, {
               agentFactory,
               fileService,
@@ -565,14 +687,53 @@ export function startServer(port: number): AgentServer {
               rules: [],
               customStyles: msg.styles,
               onEvent: (event) => {
+                // 将编排器事件实时发送给前端，用于展示进度
                 if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ type: "orchestrator_event", ...event }));
+                  ws.send(JSON.stringify({ type: "orchestrator_event", event }));
                 }
               },
             });
 
+            // 发送编排完成消息，包含最终答案
             ws.send(JSON.stringify({ type: "orchestrate_done", answer: result.answer }));
+
+            /**
+             * 保存编排结果到当前会话
+             * 
+             * 追加到现有会话而不是覆盖，保持对话连续性
+             */
+            const existingSession = await loadSession(sessionId).catch(() => null);
+            const existingMessages = existingSession?.messages || [];
+            const orchUserMsg = { role: "user", content: msg.content, timestamp: Date.now() };
+            const orchAssistantMsg = { role: "assistant", content: result.answer, timestamp: Date.now() };
+            const mergedMessages = [...existingMessages, orchUserMsg, orchAssistantMsg];
+
+            // 保存会话并建立记忆索引
+            saveSession(sessionId, mergedMessages, existingSession?.meta?.title || msg.content, {
+              modelId: currentModelId,
+              accessMode: currentMode,
+              thinking: currentThinking,
+              agentId: currentAgentId,
+            }, false).then(() => {
+              memory.indexSession(sessionId, existingSession?.meta?.title || msg.content, mergedMessages, Date.now());
+            }).catch((err: any) => console.error("[Server] 编排会话保存失败:", err.message));
+
+            /**
+             * 同步 Agent 内部状态
+             * 
+             * 将编排结果同步到当前 Agent，让后续对话能够引用这次编排的上下文
+             */
+            await initAgent(mergedMessages);
+
+            // 刷新会话列表给前端
+            listSessions().then((sessions) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "session_list", sessions }));
+              }
+            }).catch(() => { });
+
           } catch (err: any) {
+            // 编排失败，发送错误消息
             ws.send(JSON.stringify({ type: "error", message: "编排失败: " + err.message }));
           }
         }
