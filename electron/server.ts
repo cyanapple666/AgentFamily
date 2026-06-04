@@ -10,6 +10,7 @@ import { createServer } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { dialog, BrowserWindow } from "electron";
 
 import { createAgent } from "../src/agent/createAgent.js";
 import { defaultAgent } from "../src/agent/config.js";
@@ -100,6 +101,8 @@ export function startServer(port: number): AgentServer {
     let pendingPermission: { resolve: (v: boolean) => void } | null = null;
     // 是否刚切换会话（用于避免切换时更新 updatedAt）
     let justSwitchedSession = false;
+    // 沙盒配置
+    let sandboxConfig: import("../src/sandbox.js").SandboxConfig = { enabled: false, sandboxPath: "" };
 
     async function initAgent(msgs?: any[]) {
       const thisGen = ++agentGeneration;
@@ -549,18 +552,56 @@ export function startServer(port: number): AgentServer {
           ws.send(JSON.stringify({ type: "skill_list", skills: settings.skills || [], agentSkills }));
         }
 
+        // 沙盒配置
+        if (msg.type === "set_sandbox") {
+          sandboxConfig = {
+            enabled: !!msg.enabled,
+            sandboxPath: msg.sandboxPath || "",
+          };
+          // 导入并设置工具的沙盒配置
+          const { setSandbox } = await import("../src/tools/index.js");
+          setSandbox(sandboxConfig);
+          ws.send(JSON.stringify({ type: "sandbox_config", sandbox: sandboxConfig }));
+          console.log(`[Sandbox] 配置更新: enabled=${sandboxConfig.enabled}, path=${sandboxConfig.sandboxPath}`);
+        }
+
+        if (msg.type === "get_sandbox") {
+          ws.send(JSON.stringify({ type: "sandbox_config", sandbox: sandboxConfig }));
+        }
+
+        // 选择沙盒文件夹（使用 Electron 原生对话框）
+        if (msg.type === "select_folder") {
+          console.log("[Server] 收到 select_folder 请求");
+          const win = BrowserWindow.getAllWindows()[0];
+          if (win) {
+            const result = await dialog.showOpenDialog(win, {
+              properties: ["openDirectory"],
+              title: "选择沙盒文件夹",
+            });
+            console.log("[Server] 文件夹选择结果:", result);
+            if (!result.canceled && result.filePaths.length > 0) {
+              const folderPath = result.filePaths[0];
+              ws.send(JSON.stringify({ type: "folder_selected", path: folderPath }));
+            }
+          } else {
+            console.log("[Server] 没有可用的窗口");
+          }
+        }
+
         // 文件列表（书桌）
         if (msg.type === "list_files") {
           const dirPath = msg.path || ".";
           try {
-            const fullPath = path.resolve(process.cwd(), dirPath);
+            // 支持绝对路径（沙盒模式）和相对路径
+            const fullPath = path.isAbsolute(dirPath) ? dirPath : path.resolve(process.cwd(), dirPath);
+            const basePath = path.isAbsolute(dirPath) ? dirPath : process.cwd();
             const entries = await fs.readdir(fullPath, { withFileTypes: true });
             const files = entries
               .filter((e) => !e.name.startsWith(".") && e.name !== "node_modules" && e.name !== "sessions")
               .map((e) => ({
                 name: e.name,
                 isDir: e.isDirectory(),
-                path: path.relative(process.cwd(), path.join(fullPath, e.name)).replace(/\\/g, "/"),
+                path: path.relative(basePath, path.join(fullPath, e.name)).replace(/\\/g, "/"),
               }));
             files.sort((a, b) => {
               if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;

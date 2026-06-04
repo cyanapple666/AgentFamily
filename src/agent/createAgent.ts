@@ -5,11 +5,15 @@
  *   - 访问模式（只读/询问/自动）
  *   - 工具执行前后钩子
  *   - 上下文注入
+ *   - 沙盒权限检查
  */
 
 import { Agent } from "@earendil-works/pi-agent-core";
 import { getModel } from "@earendil-works/pi-ai";
+import * as path from "node:path";
 import type { AgentConfig } from "../types/index.js";
+import { checkBashWritePermission, checkWritePermission } from "../sandbox.js";
+import { getSandbox } from "../tools/index.js";
 
 // ─── 类型 ──────────────────────────────────────
 
@@ -56,11 +60,13 @@ export function createAgent(
     },
 
     // ═══════════════════════════════════════════
-    // 钩子 1: beforeToolCall — 权限门禁
+    // 钩子 1: beforeToolCall — 权限门禁 + 沙盒检查
     // ═══════════════════════════════════════════
     beforeToolCall: async ({ toolCall }) => {
       const isWrite = WRITE_TOOLS.has(toolCall.name);
+      const params = (toolCall as any).input as Record<string, unknown>;
 
+      // 1. 只读模式检查
       if (accessMode === "readonly" && isWrite) {
         return {
           block: true,
@@ -68,11 +74,29 @@ export function createAgent(
         };
       }
 
+      // 2. 沙盒权限检查
+      const sandbox = getSandbox();
+      if (sandbox.enabled) {
+        // bash 工具：检查命令中的写目标
+        if (toolCall.name === "bash" && typeof params.command === "string") {
+          const sandboxError = checkBashWritePermission(params.command, sandbox);
+          if (sandboxError) {
+            return { block: true, reason: sandboxError };
+          }
+        }
+        // write_file/edit 工具：检查目标路径
+        if ((toolCall.name === "write_file" || toolCall.name === "edit") && typeof params.filePath === "string") {
+          const fullPath = path.resolve(process.cwd(), params.filePath);
+          const sandboxError = checkWritePermission(fullPath, sandbox);
+          if (sandboxError) {
+            return { block: true, reason: sandboxError };
+          }
+        }
+      }
+
+      // 3. 询问模式检查
       if (accessMode === "ask" && isWrite && hooks?.onAsk) {
-        const allowed = await hooks.onAsk(
-          toolCall.name,
-          (toolCall as any).input as Record<string, unknown>
-        );
+        const allowed = await hooks.onAsk(toolCall.name, params);
         if (!allowed) {
           return { block: true, reason: "用户取消了此操作" };
         }

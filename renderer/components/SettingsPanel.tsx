@@ -32,14 +32,20 @@ interface Props {
   config: Config | null;
   skills: SkillMeta[];
   agentSkills: Record<string, string[]>;
+  sandboxEnabled: boolean;
+  sandboxPath: string;
   onClose: () => void;
   onSave: (c: any) => void;
   onInstallSkill: (s: any) => void;
   onRemoveSkill: (id: string) => void;
   onToggleSkill: (skillId: string, agentId: string, enabled: boolean) => void;
+  onSandboxToggle: (enabled: boolean) => void;
+  onSandboxPathChange: (path: string) => void;
+  onSetSandbox: (enabled: boolean, path: string) => void;
+  onSelectFolder: () => void;
 }
 
-type Tab = "appearance" | "providers" | "prompt" | "agents" | "skills" | "help";
+type Tab = "appearance" | "providers" | "prompt" | "agents" | "skills" | "security" | "help";
 
 const TABS: { key: Tab; label: string; zhLabel: string }[] = [
   { key: "appearance", label: "Appearance", zhLabel: "外观" },
@@ -47,12 +53,13 @@ const TABS: { key: Tab; label: string; zhLabel: string }[] = [
   { key: "prompt", label: "Prompt", zhLabel: "提示词" },
   { key: "agents", label: "Agents", zhLabel: "Agent" },
   { key: "skills", label: "Skills", zhLabel: "技能" },
+  { key: "security", label: "Security", zhLabel: "安全" },
   { key: "help", label: "Help", zhLabel: "帮助" },
 ];
 
 const D = "你是一个 AI 助手。简洁高效，直接给答案。";
 
-export default function SettingsPanel({ config, skills, agentSkills, onClose, onSave, onInstallSkill, onRemoveSkill, onToggleSkill }: Props) {
+export default function SettingsPanel({ config, skills, agentSkills, sandboxEnabled, sandboxPath, onClose, onSave, onInstallSkill, onRemoveSkill, onToggleSkill, onSandboxToggle, onSandboxPathChange, onSetSandbox, onSelectFolder }: Props) {
   const t = useT();
   const { lang, setLang } = useLang();
   const [draft, setDraft] = useState<Config | null>(null);
@@ -464,6 +471,71 @@ export default function SettingsPanel({ config, skills, agentSkills, onClose, on
                     >
                       安装
                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── 安全 ── */}
+            {tab === "security" && (
+              <div className="fade-in">
+                <SectionTitle>沙盒模式</SectionTitle>
+                <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 16, lineHeight: 1.6 }}>
+                  沙盒模式限制 AI 的文件写入权限。启用后，只有沙盒文件夹内的文件可被修改，其他目录的文件只能读取。
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>启用沙盒</span>
+                  <button
+                    onClick={() => {
+                      const newVal = !sandboxEnabled;
+                      onSandboxToggle(newVal);
+                      if (!newVal) {
+                        onSandboxPathChange("");
+                        onSetSandbox(false, "");
+                      }
+                    }}
+                    style={{
+                      width: 44, height: 24, borderRadius: 12, border: "none",
+                      background: sandboxEnabled ? "var(--accent)" : "var(--bg4)",
+                      cursor: "pointer", position: "relative", transition: "background 0.2s",
+                    }}
+                  >
+                    <div style={{
+                      width: 18, height: 18, borderRadius: "50%", background: "#fff",
+                      position: "absolute", top: 3,
+                      left: sandboxEnabled ? 23 : 3,
+                      transition: "left 0.2s",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                    }} />
+                  </button>
+                </div>
+                {sandboxEnabled && (
+                  <div className="fade-in">
+                    <FieldLabel>沙盒文件夹</FieldLabel>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        style={{ ...styles.input, flex: 1, fontFamily: "monospace", fontSize: 11 }}
+                        value={sandboxPath}
+                        readOnly
+                        placeholder="未选择文件夹"
+                      />
+                      <button
+                        onClick={() => { console.log("[Settings] 点击选择文件夹"); onSelectFolder(); }}
+                        style={{
+                          padding: "6px 14px", borderRadius: "var(--radius-sm)",
+                          border: "1px solid var(--border2)", background: "var(--bg3)",
+                          color: "var(--text)", fontSize: 12, cursor: "pointer",
+                          transition: "all var(--transition)", whiteSpace: "nowrap",
+                        }}
+                      >
+                        选择文件夹
+                      </button>
+                    </div>
+                    {sandboxPath && (
+                      <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: "var(--radius-sm)", background: "var(--bg3)", fontSize: 11, color: "var(--text3)", fontFamily: "monospace" }}>
+                        {sandboxPath}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

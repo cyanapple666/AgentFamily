@@ -1,6 +1,6 @@
 {
   "theme": "dark",
-  "lang": "zh",
+  "lang": "en",
   "activeProvider": "deepseek",
   "activeModel": "deepseek-v4-pro",
   "modelProviders": [

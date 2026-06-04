@@ -39,6 +39,8 @@ export function useWebSocket(
       ws.onopen = () => {
         if (stopped) return;
         setConnected(true);
+        // 暴露 WebSocket 实例到 window，供 SettingsPanel 等组件使用
+        (window as any).__afWs = ws;
         // 发送握手消息，携带上次的 sessionId 用于会话恢复
         ws.send(
           JSON.stringify({

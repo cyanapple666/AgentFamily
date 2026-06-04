@@ -9,6 +9,23 @@ import { Type } from "typebox";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as https from "node:https";
+import { checkWritePermission, type SandboxConfig, DEFAULT_SANDBOX } from "../sandbox.js";
+
+// ═══════════════════════════════════════════════
+// 沙盒上下文（会话级）
+// ═══════════════════════════════════════════════
+
+let _currentSandbox: SandboxConfig = DEFAULT_SANDBOX;
+
+/** 设置当前会话的沙盒配置 */
+export function setSandbox(config: SandboxConfig) {
+  _currentSandbox = config;
+}
+
+/** 获取当前会话的沙盒配置 */
+export function getSandbox(): SandboxConfig {
+  return _currentSandbox;
+}
 
 /** 工作根目录，文件工具只能访问此目录下的内容 */
 const WORK_ROOT = path.resolve(process.cwd());
@@ -83,6 +100,14 @@ export const writeFile = {
   ) {
     try {
       const fullPath = safePath(params.filePath);
+      // 沙盒检查：写操作需要在沙盒内
+      const writeError = checkWritePermission(fullPath, _currentSandbox);
+      if (writeError) {
+        return {
+          content: [{ type: "text" as const, text: writeError }],
+          details: { isError: true },
+        };
+      }
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.writeFile(fullPath, params.content, "utf-8");
       const size = Buffer.byteLength(params.content, "utf-8");

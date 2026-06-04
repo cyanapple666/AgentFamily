@@ -2,6 +2,7 @@
  * agentFamily 桌面应用 — 主组件
  */
 import { useState, useEffect, useCallback } from "react";
+import * as path from "node:path";
 import ChatPanel from "./components/ChatPanel";
 import Sidebar from "./components/Sidebar";
 import SettingsPanel from "./components/SettingsPanel";
@@ -44,6 +45,8 @@ export default function App() {
   const [tokenTotal, setTokenTotal] = useState(0);
   const [obsVisible, setObsVisible] = useState(false);
   const [obsState, setObsState] = useState<OrchestratorState>({ phase: "idle", summary: "", reasoning: "", tasks: [] });
+  const [sandboxEnabled, setSandboxEnabled] = useState(true);
+  const [sandboxPath, setSandboxPath] = useState("");
   const [fileList, setFileList] = useState<any[]>([]);
   const [filePath, setFilePath] = useState(".");
   const [showFilePanel, setShowFilePanel] = useState(true);
@@ -59,6 +62,14 @@ export default function App() {
     const json = JSON.stringify(messages);
     setCtxTokens(Math.round(json.length / 3));
   }, [messages]);
+
+  // 沙盒配置变化时，刷新文件列表
+  useEffect(() => {
+    if (showFilePanel) {
+      const listPath = sandboxEnabled && sandboxPath ? sandboxPath : ".";
+      send({ type: "list_files", path: listPath });
+    }
+  }, [sandboxEnabled, sandboxPath]);
 
   const handleMessage = useCallback((event: any) => {
     switch (event.type) {
@@ -85,6 +96,16 @@ export default function App() {
       case "permission_request": setPermRequest(event); break;
       case "file_list": setFileList(event.files || []); setFilePath(event.currentPath || "."); break;
       case "skill_list": setSkillList(event.skills || []); setAgentSkills(event.agentSkills || {}); break;
+      case "sandbox_config":
+        setSandboxEnabled(event.sandbox?.enabled || false);
+        setSandboxPath(event.sandbox?.sandboxPath || "");
+        break;
+      case "folder_selected":
+        if (event.path) {
+          setSandboxPath(event.path);
+          send({ type: "set_sandbox", enabled: true, sandboxPath: event.path });
+        }
+        break;
       case "orchestrator_event": {
         const evt = (event as any).event || event;
         // ── 更新观察面板状态 ──
@@ -269,7 +290,14 @@ export default function App() {
             <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
               <button
                 className="icon-btn"
-                onClick={() => { setShowFilePanel((v) => !v); if (!showFilePanel) send({ type: "list_files", path: "." }); }}
+                onClick={() => {
+                  setShowFilePanel((v) => !v);
+                  if (!showFilePanel) {
+                    // 沙盒开启时显示沙盒目录，否则显示项目根目录
+                    const listPath = sandboxEnabled && sandboxPath ? sandboxPath : ".";
+                    send({ type: "list_files", path: listPath });
+                  }
+                }}
                 title="文件"
                 style={{ ...(showFilePanel ? { background: "var(--accent-soft)", color: "var(--accent)" } : {}), appRegion: "no-drag" } as any}
               >
@@ -350,7 +378,15 @@ export default function App() {
           <FilePanel
             files={fileList}
             currentPath={filePath}
-            onNavigate={(dir: string) => send({ type: "list_files", path: dir })}
+            onNavigate={(dir: string) => {
+              // 沙盒模式下，如果返回的是相对路径，需要拼接成绝对路径
+              // 使用 path.isAbsolute() 检测，支持 Windows、Linux、macOS 各种路径格式
+              const isAbsolute = path.isAbsolute(dir);
+              const fullPath = sandboxEnabled && sandboxPath && !isAbsolute
+                ? sandboxPath.replace(/\\/g, "/") + "/" + dir
+                : dir;
+              send({ type: "list_files", path: fullPath });
+            }}
             onFileClick={(fp: string) => { const i = (window as any).__afInput; if (i) { i.value = i.value ? i.value + " @" + fp : "@" + fp; i.focus(); } }}
             onClose={() => setShowFilePanel(false)}
           />
@@ -363,11 +399,20 @@ export default function App() {
           config={appConfig}
           skills={skillList}
           agentSkills={agentSkills}
+          sandboxEnabled={sandboxEnabled}
+          sandboxPath={sandboxPath}
           onClose={() => setSettingsOpen(false)}
           onSave={(cfg: any) => send({ type: "set_config", config: cfg })}
           onInstallSkill={(s: any) => send({ type: "install_skill", skill: s })}
           onRemoveSkill={(id: string) => send({ type: "remove_skill", skillId: id })}
           onToggleSkill={(skillId: string, agentId: string, enabled: boolean) => send({ type: "toggle_skill", skillId, agentId, enabled })}
+          onSandboxToggle={(enabled: boolean) => setSandboxEnabled(enabled)}
+          onSandboxPathChange={(path: string) => setSandboxPath(path)}
+          onSetSandbox={(enabled: boolean, path: string) => send({ type: "set_sandbox", enabled, sandboxPath: path })}
+          onSelectFolder={() => {
+            console.log("[App] onSelectFolder 被调用, send:", typeof send);
+            send({ type: "select_folder" });
+          }}
         />
       )}
 
