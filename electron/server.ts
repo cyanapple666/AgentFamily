@@ -322,6 +322,8 @@ export function startServer(port: number): AgentServer {
             currentAgentId = saved.meta?.agentId || "default";
             sessionTitle = saved.meta?.title || "";
             firstMessage = "";
+            // 标记刚切换会话，避免 initAgent 时触发的 agent_end 更新 updatedAt
+            justSwitchedSession = true;
             await initAgent(saved.messages);
             ws.send(JSON.stringify({ type: "session", sessionId }));
             ws.send(JSON.stringify({ type: "history", messages: saved.messages }));
