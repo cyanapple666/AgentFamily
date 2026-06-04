@@ -27,13 +27,7 @@ export default function Sidebar({ sessions, currentId, onSwitch, onNew, onRename
   const active = sessions.filter((s) => !s.archived);
   const archived = sessions.filter((s) => s.archived);
 
-  if (collapsed) {
-    return (
-      <div style={st.collapsed} onClick={onToggle} title={t("sessions")}>
-        <MenuIcon size={18} color="var(--text2)" />
-      </div>
-    );
-  }
+  if (collapsed) return null;
 
   const renderItem = (s: SessionMeta) => {
     const isActive = s.id === currentId;

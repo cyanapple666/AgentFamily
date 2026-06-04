@@ -11,7 +11,7 @@ const translations: Record<Lang, Record<string, string>> = {
     appName: "agentFamily",
     send: "发送",
     inputPlaceholder: "输入消息...",
-    newSession: "+ 新建",
+    newSession: "新建",
     sessions: "会话",
     archived: "已归档",
     noSessions: "暂无会话",
@@ -103,7 +103,7 @@ function detectLang(): Lang {
   try {
     const stored = localStorage.getItem(LANG_KEY);
     if (stored && langs.includes(stored as Lang)) return stored as Lang;
-  } catch {}
+  } catch { }
   const nav = navigator.language || "";
   return nav.startsWith("zh") ? "zh" : "en";
 }
@@ -114,7 +114,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Lang>(detectLang);
 
   useEffect(() => {
-    try { localStorage.setItem(LANG_KEY, lang); } catch {}
+    try { localStorage.setItem(LANG_KEY, lang); } catch { }
   }, [lang]);
 
   const t = (key: string) => translations[lang][key] || translations.en[key] || key;

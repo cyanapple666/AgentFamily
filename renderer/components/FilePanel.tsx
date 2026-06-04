@@ -98,6 +98,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
     userSelect: "none",
     color: "var(--text)",
+    paddingTop: 38,
   },
   header: {
     padding: "10px 14px",

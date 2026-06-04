@@ -246,10 +246,10 @@ export default function App() {
         {/* 主区域 */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           {/* Header */}
-          <header style={s.header}>
+          <header style={s.header(showFilePanel)}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {!sidebarOpen && (
-                <button className="icon-btn" onClick={() => setSidebarOpen(true)} title={t("sessions")} style={{ marginRight: 2 }}>
+                <button className="icon-btn" onClick={() => setSidebarOpen(true)} title={t("sessions")} style={{ marginRight: 2, appRegion: "no-drag" } as any}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="18" y2="18" />
                   </svg>
@@ -271,7 +271,7 @@ export default function App() {
                 className="icon-btn"
                 onClick={() => { setShowFilePanel((v) => !v); if (!showFilePanel) send({ type: "list_files", path: "." }); }}
                 title="文件"
-                style={showFilePanel ? { background: "var(--accent-soft)", color: "var(--accent)" } : {}}
+                style={{ ...(showFilePanel ? { background: "var(--accent-soft)", color: "var(--accent)" } : {}), appRegion: "no-drag" } as any}
               >
                 <FolderIcon size={16} />
               </button>
@@ -279,6 +279,7 @@ export default function App() {
                 className="icon-btn"
                 onClick={() => { send({ type: "get_config" }); setSettingsOpen(true); }}
                 title="设置"
+                style={{ appRegion: "no-drag" } as any}
               >
                 <SettingsIcon size={16} />
               </button>
@@ -394,15 +395,17 @@ export default function App() {
 
 const s: Record<string, any> = {
   container: { display: "flex", flexDirection: "column", height: "100vh" },
-  header: {
+  header: (showFilePanel: boolean) => ({
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     padding: "8px 16px",
+    paddingRight: showFilePanel ? 16 : 150,
     borderBottom: "1px solid var(--border)",
     background: "var(--bg2)",
     minHeight: 48,
-  },
+    appRegion: "drag" as any,
+  }),
   logo: {
     fontSize: 14,
     fontWeight: 700,

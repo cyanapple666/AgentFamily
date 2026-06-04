@@ -23,7 +23,12 @@ function createWindow() {
     minHeight: 600,
     title: "agentFamily",
     backgroundColor: "#1a1a2e",
-    titleBarStyle: "default",
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: "#00000000",
+      symbolColor: "#8b8fa3",
+      height: 38,
+    },
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
